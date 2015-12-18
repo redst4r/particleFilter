@@ -1,6 +1,12 @@
 import numpy as np
 import pandas as pd
 from matplotlib.mlab import normpdf
+
+# importing the cython file and compile
+import pyximport; pyximport.install()
+from SSA import forwardSim, forwardSim_cython
+
+
 class ParticlePopulation(object):
 
     def __init__(self):
@@ -153,43 +159,3 @@ def multivariate_uniform(N,lb,ub):
         thetas[:,count] = np.random.uniform(l,u, N)
     return thetas
 
-
-def forwardSim(iniT, iniS, maxTime, rates):
-    """ 
-    simply forward sim of stoch model, 
-    returning final state and number of reactions and the integrated props"""
-    species = ["mRNA", "Protein"]
-    V = np.array([[1, 0],
-        [-1, 0],
-        [ 0, 1],
-         [0, -1]]);
-    
-    assert len(rates)==4, 'Reaction rates have to be 4'
-
-    nReactions, nSpecies = V.shape
-
-    propensities = lambda state: np.array([rates[0], rates[1]*state[0], rates[2]*state[0], rates[3]*state[1]])
-    nReactions, nSpecies = V.shape
-    
-    reactionCounter = np.zeros(nReactions)
-    
-    time = iniT
-    theState = iniS
-    integrated_props = np.zeros(nReactions)
-    while time < maxTime:
-
-        props = propensities(theState)
-        a0 = sum(props)
-        a_norm = props/a0
-        tau = np.random.exponential(1/a0)
-
-        mu = np.where(np.cumsum(a_norm) > np.random.rand())[0][0]  # categorial rv witrh probs a_norm
-
-        time = time + tau
-        theState = theState + V[mu,:]
-        reactionCounter[mu] += 1
-        
-        integrated_props += props*tau
-        
-    G = integrated_props/rates
-    return theState, reactionCounter, G
