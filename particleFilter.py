@@ -10,7 +10,6 @@ class ParticlePopulation(object):
     def addParticle(self, particle, weight):
         assert weight is not None
         if self.particles != []:
-            assert len(particle.theta) == len(self.particles[-1].theta) # all particle have same dimension
             assert len(particle.state) == len(self.particles[-1].state) # all particle have same dimension
 
         self.weights.append(weight)
@@ -23,6 +22,8 @@ class ParticlePopulation(object):
 
         norm_weights = np.array(self.weights)/sum(self.weights)
         ix = np.random.multinomial(nSamples, norm_weights, size=1)
+
+        assert np.sum(ix) == nSamples, 'sth went wrong probly all weights are zero!!'
         return ix
 
     def sample_from_population_generator(self, nSamples):
@@ -104,17 +105,47 @@ class MyGammaParticle(object):
         """
         # the particle is acutally a gamma distribution over rates and encodes the starting state
         # sample from it!
-        assert len(self.alpha) == len(self.beta)
-        rates = np.random.gamma(shape=self.alpha, scale=1/self.beta)
+        rates = self.sampleRates(N=1)
 
         # get the forward sim, yieling how to update the current particle
         finalState, counter, G = forwardSim(0, self.state, tau, rates)  # see justins thesis for G: integrated props/rate
 
         #calc weight of particle based on the likelihood
-        sigma_measure = 3
+        sigma_measure = 5
+
+        # assert  len(datapoint)==2 
+        # weight = normpdf(datapoint, finalState[0], 1) #* normpdf(datapoint[1], finalState[1], sigma_measure)
         weight = normpdf(datapoint, finalState[1], sigma_measure)
 
         return weight, finalState, counter, G
+
+    def sampleRates(self, N):
+        """ create N sampels from the Gamma distributiosn this particle represents"""
+        assert len(self.alpha) == len(self.beta)
+        if N==1:
+            return np.random.gamma(shape=self.alpha, scale=1/self.beta)        
+        else:
+            raise NotImplementedError('not yet implemented for N>1')
+
+def plot_posterior_rates(population, nParticles):
+    """a particle encodes a whole distrinbution over rates
+    hence sample from this distribution to get the posterior over the rates"""
+
+    samples_per_particle = 100
+    ratesSamples = []
+    colors = []
+    for i,particle in enumerate(population.sample_from_population_generator(nParticles)):
+        #sample the rates n tims from this distribution the particle encodes
+        q = [particle.sampleRates(1) for i in range(samples_per_particle)]
+        w = [i for j in range(samples_per_particle)]
+        ratesSamples.append(q)
+        colors.append(w)
+    ratesSamples = np.vstack(ratesSamples)
+    colors =  np.vstack(colors)  
+
+    df = pd.DataFrame(ratesSamples)
+    pd.scatter_matrix(df,figsize=[20,20],marker='x',c =colors) # c=df.Survived.apply(lambda x:colors[x])
+
 
 def multivariate_uniform(N,lb,ub):
     thetas = np.zeros((N,len(lb)))
