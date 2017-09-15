@@ -54,7 +54,6 @@ def forwardSim(iniT, iniS, maxTime, rates):
 
 # the cythonized version of  SSA
 cimport numpy as np
-
 cimport cython
 @cython.profile(False)
 cdef inline np.ndarray propensities(np.ndarray state, np.ndarray rates): return np.array([rates[0], rates[1]*state[0], rates[2]*state[0], rates[3]*state[1]])
@@ -80,10 +79,8 @@ def forwardSim_cython(float iniT, np.ndarray iniS, float maxTime, np.ndarray rat
         [-1, 0],
         [ 0, 1],
          [0, -1]], dtype=np.int);
-
     assert len(rates) == 4, 'Reaction rates have to be 4'
 
- 
     #propensities = lambda state: np.array([rates[0], rates[1]*state[0], rates[2]*state[0], rates[3]*state[1]])
 
     cdef int nReactions = V.shape[0]
@@ -103,11 +100,10 @@ def forwardSim_cython(float iniT, np.ndarray iniS, float maxTime, np.ndarray rat
     cdef float tau
     cdef int mu
     cdef int mu2
-    cdef r
+    cdef float r
     #timeVector = [iniT]
     #stateVector = [iniS]
     while time < maxTime:
-
         props = propensities(theState, rates)
         a0 = np.sum(props)
         a_norm = props/a0

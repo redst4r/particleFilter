@@ -4,7 +4,8 @@ from matplotlib.mlab import normpdf
 
 # importing the cython file and compile
 import pyximport; pyximport.install()
-from SSA import forwardSim, forwardSim_cython
+from SSA import forwardSim
+from SSA_improved import forwardSim_cython
 
 
 class ParticlePopulation(object):
@@ -25,7 +26,6 @@ class ParticlePopulation(object):
         return len(self.particles)
 
     def sample_from_population_ix(self, nSamples):
-
         norm_weights = np.array(self.weights)/sum(self.weights)
         ix = np.random.multinomial(nSamples, norm_weights, size=1)
 
@@ -57,16 +57,17 @@ class ParticlePopulation(object):
 
     def plot_population_sample(self, sampleSize):
         matrix = self.sample_from_population_matrix(sampleSize)
-        df = pd.DataFrame(matrix)
+        cNames = self.particles[0].get_plotable_particle()[1]
+        df = pd.DataFrame(matrix, columns=cNames)
         pd.scatter_matrix(df,figsize=[20,20],marker='x') # c=df.Survived.apply(lambda x:colors[x])
 
-    
+
 class MyParticle(object):
     """encoding parameters and hidden states"""
     def __init__(self, theta, state):
         self.theta = theta
         self.state = state
-
+        assert isinstance(state, np.ndarray), "datapoint should be numpy.array, but is %s" % state.type
     def get_plotable_particle(self):
         "returns a nuermic vector and names of its entries, used to plot"
         v = np.concatenate((self.theta, self.state),0)
@@ -80,7 +81,11 @@ class MyParticle(object):
         theta, state = particle.theta, particle.state
 
         # get the forward sim, yieling how to update the current particle
+        
+        # old and slow
         finalState, counter, G = forwardSim(0, state, tau, np.exp(theta))  # see justins thesis for G: integrated props/rate
+
+        #finalState, counter, G = forwardSim_cython(0, state, tau, np.exp(theta))  # see justins thesis for G: integrated props/rate
 
         #calc weight of particle based on the likelihood
         sigma_measure = 3
@@ -92,6 +97,7 @@ class MyParticle(object):
 class MyGammaParticle(object):
     """encoding a Gamma-distribution over rates. also has hidden states"""
     def __init__(self, alpha, beta, state):
+        assert isinstance(state, np.ndarray), "datapoint should be numpy.array, but is %s" % state.type
         self.alpha = alpha
         self.beta = beta
         self.state = state
@@ -109,15 +115,23 @@ class MyGammaParticle(object):
         """
         calculates the weight of the particle in the light of some datapoint
         """
+
+        assert isinstance(datapoint, np.ndarray), "datapoint should be numpy.array, but is %s" % datapoint.type
+
         # the particle is acutally a gamma distribution over rates and encodes the starting state
         # sample from it!
         rates = self.sampleRates(N=1)
 
         # get the forward sim, yieling how to update the current particle
-        finalState, counter, G = forwardSim(0, self.state, tau, rates)  # see justins thesis for G: integrated props/rate
+        #finalState, counter, G = forwardSim(0, self.state, tau, rates)  # see justins thesis for G: integrated props/rate
+
+        finalState, counter, G = forwardSim_cython(0, self.state, tau, rates)  # see justins thesis for G: integrated props/rate
+
+        for q in [finalState, counter, G]:
+            assert not np.any(np.isnan(q))
 
         #calc weight of particle based on the likelihood
-        sigma_measure = 5
+        sigma_measure = 50
 
         # assert  len(datapoint)==2 
         # weight = normpdf(datapoint, finalState[0], 1) #* normpdf(datapoint[1], finalState[1], sigma_measure)
@@ -140,17 +154,17 @@ def plot_posterior_rates(population, nParticles):
     samples_per_particle = 100
     ratesSamples = []
     colors = []
-    for i,particle in enumerate(population.sample_from_population_generator(nParticles)):
+    for i, particle in enumerate(population.sample_from_population_generator(nParticles)):
         #sample the rates n tims from this distribution the particle encodes
         q = [particle.sampleRates(1) for i in range(samples_per_particle)]
         w = [i for j in range(samples_per_particle)]
         ratesSamples.append(q)
         colors.append(w)
     ratesSamples = np.vstack(ratesSamples)
-    colors =  np.vstack(colors)  
+    colors = np.vstack(colors)
 
     df = pd.DataFrame(ratesSamples)
-    pd.scatter_matrix(df,figsize=[20,20],marker='x',c =colors) # c=df.Survived.apply(lambda x:colors[x])
+    pd.scatter_matrix(df,figsize=[20,20],marker='x',c=colors, cmap = cm.jet)
 
 
 def multivariate_uniform(N,lb,ub):

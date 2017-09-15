@@ -24,3 +24,6 @@
 
 #python compiled files
 *.pyc
+
+# python profiling
+*.prof
